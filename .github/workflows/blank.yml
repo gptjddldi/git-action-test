@@ -23,20 +23,32 @@ jobs:
                 pull_number: context.issue.number,
               });
 
+              const { data: pullRequest } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.issue.number,
+              });
+
+              const commit_id = pullRequest.head.sha;
+
               for (const file of changedFiles) {
                 if (!file.patch) continue;
 
                 const lines = file.patch.split('\n');
                 let lineNumber = 0;
+                let position = 0;
 
                 for (const line of lines) {
                   if (line.startsWith('@@')) {
                     const match = line.match(/@@ -\d+,?\d* \+(\d+),?\d* @@/);
                     if (match) {
                       lineNumber = parseInt(match[1]) - 1;
+                      position = 0;
                     }
                     continue;
                   }
+
+                  position++;
 
                   if (line.startsWith('+')) {
                     lineNumber++;
@@ -48,13 +60,13 @@ jobs:
                           pull_number: context.issue.number,
                           body: '변경된 라인에서 \'TODO\' 주석을 발견했습니다. 이 부분을 완료해주세요.',
                           path: file.filename,
-                          line: lineNumber,
-                          side: 'RIGHT'
+                          commit_id: commit_id,
+                          position: position
                         });
-                        console.log(`Comment added to ${file.filename} at line ${lineNumber}`);
+                        console.log(`Comment added to ${file.filename} at position ${position}`);
                       } catch (error) {
                         console.error(`Error adding comment: ${error.message}`);
-                        console.error(`File: ${file.filename}, Line: ${lineNumber}`);
+                        console.error(`File: ${file.filename}, Position: ${position}`);
                       }
                     }
                   } else if (!line.startsWith('-')) {
