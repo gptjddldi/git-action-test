@@ -1,8 +1,8 @@
 name: PR Review
 
 on:
-  pull_request:
-    types: [opened, synchronize]
+  issue_comment:
+    types: [created]
 
 jobs:
   review:
@@ -11,74 +11,80 @@ jobs:
       - uses: actions/checkout@v2
         with:
           fetch-depth: 0
-      # - name: Send request to server
-      #   run: curl -X GET http://localhost:4432/review_request
-      - name: Send request to server
+      - name: Check for trigger command
+        id: check_trigger
         run: |
-          response=$(curl -s http://localhost:4432/review_request)
-          echo "Server response: $response"
-      # - name: PR Review
-      #   uses: actions/github-script@v6
-      #   with:
-      #     github-token: ${{secrets.GITHUB_TOKEN}}
-      #     script: |
-      #       const fs = require('fs');
+          COMMANE_TRIGGER="request review"
+          if [[ $(jq .comment.body $GITHUB_EVENT_PATH) == *"$COMMANE_TRIGGER"* ]]; then
+            echo "::set-output name=trigger::true"
+          else
+            echo "::set-output name=trigger::false"
+          fi
 
-      #       async function reviewPR() {
-      #         const { data: changedFiles } = await github.rest.pulls.listFiles({
-      #           owner: context.repo.owner,
-      #           repo: context.repo.repo,
-      #           pull_number: context.issue.number,
-      #         });
+      - name: PR Review
+        if: steps.check_trigger.outputs.trigger == 'true'
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{secrets.GITHUB_TOKEN}}
+          script: |
+            const fs = require('fs');
 
-      #         const { data: pullRequest } = await github.rest.pulls.get({
-      #           owner: context.repo.owner,
-      #           repo: context.repo.repo,
-      #           pull_number: context.issue.number,
-      #         });
+            async function reviewPR() {
+              const { data: changedFiles } = await github.rest.pulls.listFiles({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.issue.number,
+              });
 
-      #         const commit_id = pullRequest.head.sha;
-      #         let changeLog = '';
+              const { data: pullRequest } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.issue.number,
+              });
 
-      #         for (const file of changedFiles) {
-      #           if (!file.patch) continue;
+              const commit_id = pullRequest.head.sha;
+              let changeLog = '';
 
-      #           changeLog += `File: ${file.filename}\n`;
-      #           const lines = file.patch.split('\n');
-      #           let lineNumber = 0;
-      #           let position = 0;
+              for (const file of changedFiles) {
+                if (!file.patch) continue;
 
-      #           for (const line of lines) {
-      #             if (line.startsWith('@@')) {
-      #               const match = line.match(/@@ -\d+,?\d* \+(\d+),?\d* @@/);
-      #               if (match) {
-      #                 lineNumber = parseInt(match[1]) - 1;
-      #                 position = 0;
-      #               }
-      #               continue;
-      #             }
+                changeLog += `File: ${file.filename}\n`;
+                const lines = file.patch.split('\n');
+                let lineNumber = 0;
+                let position = 0;
 
-      #             position++;
+                for (const line of lines) {
+                  if (line.startsWith('@@')) {
+                    const match = line.match(/@@ -\d+,?\d* \+(\d+),?\d* @@/);
+                    if (match) {
+                      lineNumber = parseInt(match[1]) - 1;
+                      position = 0;
+                    }
+                    continue;
+                  }
 
-      #             if (line.startsWith('+')) {
-      #               lineNumber++;
-      #               changeLog += `Added (Line ${lineNumber}): ${line.substring(1)}\n`;
-      #               if (line.includes('TODO')) {
-      #                 changeLog += `  - Note: 'TODO' comment found. Please address this.\n`;
-      #               }
-      #             } else if (line.startsWith('-')) {
-      #               changeLog += `Removed (Line ${lineNumber}): ${line.substring(1)}\n`;
-      #             } else {
-      #               lineNumber++;
-      #             }
-      #           }
-      #           changeLog += '\n';
-      #         }
+                  position++;
 
-      #         fs.writeFileSync('change_log.txt', changeLog);
-      #         console.log('Change log written to change_log.txt');
-      #       }
+                  if (line.startsWith('+')) {
+                    lineNumber++;
+                    changeLog += `Added (Line ${lineNumber}): ${line.substring(1)}\n`;
+                    if (line.includes('TODO')) {
+                      changeLog += `  - Note: 'TODO' comment found. Please address this.\n`;
+                    }
+                  } else if (line.startsWith('-')) {
+                    changeLog += `Removed (Line ${lineNumber}): ${line.substring(1)}\n`;
+                  } else {
+                    lineNumber++;
+                  }
+                }
+                changeLog += '\n';
+              }
 
-      #       await reviewPR();
-      # - name: Display Change Log
-      #   run: cat change_log.txt
+              fs.writeFileSync('change_log.txt', changeLog);
+              console.log('Change log written to change_log.txt');
+            }
+
+            await reviewPR();
+      - name: Display Change Log
+        if: steps.check_trigger.outputs.trigger == 'true'
+        run: cat change_log.txt
