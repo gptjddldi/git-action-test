@@ -9,13 +9,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0  # 모든 히스토리를 가져옵니다
       - name: PR Review
         uses: actions/github-script@v6
         with:
           github-token: ${{secrets.GITHUB_TOKEN}}
           script: |
             const fs = require('fs');
-            const path = require('path');
 
             async function reviewPR() {
               // PR의 변경된 파일 목록 가져오기
@@ -25,25 +26,38 @@ jobs:
                 pull_number: context.issue.number,
               });
 
+              // PR의 최신 커밋 SHA 가져오기
+              const { data: pullRequest } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.issue.number,
+              });
+              const latestCommitSha = pullRequest.head.sha;
+
               for (const file of changedFiles) {
                 // 파일 내용 읽기
-                const fileContent = fs.readFileSync(file.filename, 'utf8');
+                let fileContent;
+                try {
+                  fileContent = fs.readFileSync(file.filename, 'utf8');
+                } catch (error) {
+                  console.error(`Error reading file ${file.filename}: ${error.message}`);
+                  continue;
+                }
                 const lines = fileContent.split('\n');
 
-                // 여기에 리뷰 로직 구현
-                // 예: 특정 패턴 검색, 코드 스타일 확인 등
-
-                // 예시: 'TODO' 주석 찾기
-                for (let index = 0; index < lines.length; index++) {
-                  const line = lines[index];
+                // 'TODO' 주석 찾기
+                for (let lineNumber = 1; lineNumber <= lines.length; lineNumber++) {
+                  const line = lines[lineNumber - 1];
                   if (line.includes('TODO')) {
                     await github.rest.pulls.createReviewComment({
                       owner: context.repo.owner,
                       repo: context.repo.repo,
                       pull_number: context.issue.number,
                       body: '\'TODO\' 주석을 발견했습니다. 이 부분을 완료해주세요.',
+                      commit_id: latestCommitSha,
                       path: file.filename,
-                      line: index + 1,
+                      line: lineNumber,
+                      side: 'RIGHT'
                     });
                   }
                 }
