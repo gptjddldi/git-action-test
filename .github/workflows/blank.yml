@@ -17,32 +17,38 @@ jobs:
             const fs = require('fs');
             const path = require('path');
 
-            // PR의 변경된 파일 목록 가져오기
-            const { data: changedFiles } = await github.rest.pulls.listFiles({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: context.issue.number,
-            });
-
-            for (const file of changedFiles) {
-              // 파일 내용 읽기
-              const fileContent = fs.readFileSync(file.filename, 'utf8');
-              const lines = fileContent.split('\n');
-
-              // 여기에 리뷰 로직 구현
-              // 예: 특정 패턴 검색, 코드 스타일 확인 등
-
-              // 예시: 'TODO' 주석 찾기
-              lines.forEach((line, index) => {
-                if (line.includes('TODO')) {
-                  await github.rest.pulls.createReviewComment({
-                    owner: context.repo.owner,
-                    repo: context.repo.repo,
-                    pull_number: context.issue.number,
-                    body: '\'TODO\' 주석을 발견했습니다. 이 부분을 완료해주세요.',
-                    path: file.filename,
-                    line: index + 1,
-                  });
-                }
+            async function reviewPR() {
+              // PR의 변경된 파일 목록 가져오기
+              const { data: changedFiles } = await github.rest.pulls.listFiles({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.issue.number,
               });
+
+              for (const file of changedFiles) {
+                // 파일 내용 읽기
+                const fileContent = fs.readFileSync(file.filename, 'utf8');
+                const lines = fileContent.split('\n');
+
+                // 여기에 리뷰 로직 구현
+                // 예: 특정 패턴 검색, 코드 스타일 확인 등
+
+                // 예시: 'TODO' 주석 찾기
+                for (let index = 0; index < lines.length; index++) {
+                  const line = lines[index];
+                  if (line.includes('TODO')) {
+                    await github.rest.pulls.createReviewComment({
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      pull_number: context.issue.number,
+                      body: '\'TODO\' 주석을 발견했습니다. 이 부분을 완료해주세요.',
+                      path: file.filename,
+                      line: index + 1,
+                    });
+                  }
+                }
+              }
             }
+
+            // 리뷰 함수 실행
+            await reviewPR();
