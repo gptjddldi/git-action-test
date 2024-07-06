@@ -23,13 +23,21 @@ jobs:
                 pull_number: context.issue.number,
               });
 
+              const { data: pullRequest } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.issue.number,
+              });
+              const latestCommitSha = pullRequest.head.sha;
+
               for (const file of changedFiles) {
                 if (!file.patch) continue;
 
                 const lines = file.patch.split('\n');
                 let lineNumber = 0;
 
-                for (const line of lines) {
+                for (let i = 0; i < lines.length; i++) {
+                  const line = lines[i];
                   if (line.startsWith('@@')) {
                     const match = line.match(/@@ -\d+,?\d* \+(\d+),?\d* @@/);
                     if (match) {
@@ -41,15 +49,19 @@ jobs:
                   if (line.startsWith('+')) {
                     lineNumber++;
                     if (line.includes('TODO')) {
+                      
                       try {
-                        await github.rest.pulls.createReviewThreadForLine({
+                        await github.rest.pulls.createReviewComment({
                           owner: context.repo.owner,
                           repo: context.repo.repo,
                           pull_number: context.issue.number,
                           body: '변경된 라인에서 \'TODO\' 주석을 발견했습니다. 이 부분을 완료해주세요.',
+                          commit_id: latestCommitSha,
                           path: file.filename,
                           line: lineNumber,
-                          side: 'RIGHT'
+                          side: 'RIGHT',
+                          start_line: lineNumber,
+                          start_side: 'RIGHT',
                         });
                         console.log(`Comment added to ${file.filename} at line ${lineNumber}`);
                       } catch (error) {
