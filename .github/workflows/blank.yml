@@ -9,40 +9,78 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
       - name: PR Review
         uses: actions/github-script@v6
         with:
           github-token: ${{secrets.GITHUB_TOKEN}}
           script: |
-            const fs = require('fs');
-            const path = require('path');
-
-            // PR의 변경된 파일 목록 가져오기
-            const { data: changedFiles } = await github.rest.pulls.listFiles({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: context.issue.number,
-            });
-
-            for (const file of changedFiles) {
-              // 파일 내용 읽기
-              const fileContent = fs.readFileSync(file.filename, 'utf8');
-              const lines = fileContent.split('\n');
-
-              // 여기에 리뷰 로직 구현
-              // 예: 특정 패턴 검색, 코드 스타일 확인 등
-
-              // 예시: 'TODO' 주석 찾기
-              lines.forEach((line, index) => {
-                if (line.includes('TODO')) {
-                  await github.rest.pulls.createReviewComment({
-                    owner: context.repo.owner,
-                    repo: context.repo.repo,
-                    pull_number: context.issue.number,
-                    body: '\'TODO\' 주석을 발견했습니다. 이 부분을 완료해주세요.',
-                    path: file.filename,
-                    line: index + 1,
-                  });
-                }
+            async function reviewPR() {
+              const { data: changedFiles } = await github.rest.pulls.listFiles({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.issue.number,
               });
+
+              const { data: pullRequest } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.issue.number,
+              });
+              const latestCommitSha = pullRequest.head.sha;
+
+              for (const file of changedFiles) {
+                if (!file.patch) continue;
+
+                const lines = file.patch.split('\n');
+                let lineNumber = 0;
+                let diffHunk = '';
+                let hunkStart = 0;
+
+                for (let i = 0; i < lines.length; i++) {
+                  const line = lines[i];
+                  if (line.startsWith('@@')) {
+                    const match = line.match(/@@ -\d+,?\d* \+(\d+),?\d* @@/);
+                    if (match) {
+                      lineNumber = parseInt(match[1]) - 1;
+                      hunkStart = i;
+                    }
+                    continue;
+                  }
+
+                  if (line.startsWith('+')) {
+                    lineNumber++;
+                    if (line.includes('TODO')) {
+                      // Construct diff_hunk (コードの一部分)
+                      diffHunk = lines.slice(Math.max(0, hunkStart), i + 1).join('\n');
+                      
+                      try {
+                        await github.rest.pulls.createReviewComment({
+                          owner: context.repo.owner,
+                          repo: context.repo.repo,
+                          pull_number: context.issue.number,
+                          body: '변경된 라인에서 \'TODO\' 주석을 발견했습니다. 이 부분을 완료해주세요.',
+                          commit_id: latestCommitSha,
+                          path: file.filename,
+                          line: lineNumber,
+                          side: 'RIGHT',
+                          start_line: lineNumber,
+                          start_side: 'RIGHT',
+                          diff_hunk: diffHunk
+                        });
+                        console.log(`Comment added to ${file.filename} at line ${lineNumber}`);
+                      } catch (error) {
+                        console.error(`Error adding comment: ${error.message}`);
+                        console.error(`File: ${file.filename}, Line: ${lineNumber}`);
+                        console.error(`Diff hunk: ${diffHunk}`);
+                      }
+                    }
+                  } else if (!line.startsWith('-')) {
+                    lineNumber++;
+                  }
+                }
+              }
             }
+
+            await reviewPR();
