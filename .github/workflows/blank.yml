@@ -86,4 +86,5 @@ jobs:
 
             await reviewPR();
       - name: Display Change Log
+        if: steps.check_trigger.outputs.trigger == 'true'
         run: cat change_log.txt
