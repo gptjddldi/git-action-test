@@ -1,7 +1,4 @@
 print("hello world")
 
 
-# TODO: Implement Function to Reveiw Git Diff by Using deepseek-coder-v2
-
-
-# TODO: How about Other TODO
+# TODO 1: Create a new function called "hello" that prints "hello world" to the console

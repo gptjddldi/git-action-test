@@ -16,6 +16,8 @@ jobs:
         with:
           github-token: ${{secrets.GITHUB_TOKEN}}
           script: |
+            const fs = require('fs');
+
             async function reviewPR() {
               const { data: changedFiles } = await github.rest.pulls.listFiles({
                 owner: context.repo.owner,
@@ -30,10 +32,12 @@ jobs:
               });
 
               const commit_id = pullRequest.head.sha;
+              let changeLog = '';
 
               for (const file of changedFiles) {
                 if (!file.patch) continue;
 
+                changeLog += `File: ${file.filename}\n`;
                 const lines = file.patch.split('\n');
                 let lineNumber = 0;
                 let position = 0;
@@ -52,28 +56,23 @@ jobs:
 
                   if (line.startsWith('+')) {
                     lineNumber++;
+                    changeLog += `Added (Line ${lineNumber}): ${line.substring(1)}\n`;
                     if (line.includes('TODO')) {
-                      try {
-                        await github.rest.pulls.createReviewComment({
-                          owner: context.repo.owner,
-                          repo: context.repo.repo,
-                          pull_number: context.issue.number,
-                          body: '변경된 라인에서 \'TODO\' 주석을 발견했습니다. 이 부분을 완료해주세요.',
-                          path: file.filename,
-                          commit_id: commit_id,
-                          position: position
-                        });
-                        console.log(`Comment added to ${file.filename} at position ${position}`);
-                      } catch (error) {
-                        console.error(`Error adding comment: ${error.message}`);
-                        console.error(`File: ${file.filename}, Position: ${position}`);
-                      }
+                      changeLog += `  - Note: 'TODO' comment found. Please address this.\n`;
                     }
-                  } else if (!line.startsWith('-')) {
+                  } else if (line.startsWith('-')) {
+                    changeLog += `Removed (Line ${lineNumber}): ${line.substring(1)}\n`;
+                  } else {
                     lineNumber++;
                   }
                 }
+                changeLog += '\n';
               }
+
+              fs.writeFileSync('change_log.txt', changeLog);
+              console.log('Change log written to change_log.txt');
             }
 
             await reviewPR();
+      - name: Display Change Log
+        run: cat change_log.txt
