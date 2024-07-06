@@ -23,28 +23,17 @@ jobs:
                 pull_number: context.issue.number,
               });
 
-              const { data: pullRequest } = await github.rest.pulls.get({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                pull_number: context.issue.number,
-              });
-              const latestCommitSha = pullRequest.head.sha;
-
               for (const file of changedFiles) {
                 if (!file.patch) continue;
 
                 const lines = file.patch.split('\n');
                 let lineNumber = 0;
-                let diffHunk = '';
-                let hunkStart = 0;
 
-                for (let i = 0; i < lines.length; i++) {
-                  const line = lines[i];
+                for (const line of lines) {
                   if (line.startsWith('@@')) {
                     const match = line.match(/@@ -\d+,?\d* \+(\d+),?\d* @@/);
                     if (match) {
                       lineNumber = parseInt(match[1]) - 1;
-                      hunkStart = i;
                     }
                     continue;
                   }
@@ -52,28 +41,20 @@ jobs:
                   if (line.startsWith('+')) {
                     lineNumber++;
                     if (line.includes('TODO')) {
-                      // Construct diff_hunk (コードの一部分)
-                      diffHunk = lines.slice(Math.max(0, hunkStart), i + 1).join('\n');
-                      
                       try {
-                        await github.rest.pulls.createReviewComment({
+                        await github.rest.pulls.createReviewThreadForLine({
                           owner: context.repo.owner,
                           repo: context.repo.repo,
                           pull_number: context.issue.number,
                           body: '변경된 라인에서 \'TODO\' 주석을 발견했습니다. 이 부분을 완료해주세요.',
-                          commit_id: latestCommitSha,
                           path: file.filename,
                           line: lineNumber,
-                          side: 'RIGHT',
-                          start_line: lineNumber,
-                          start_side: 'RIGHT',
-                          diff_hunk: diffHunk
+                          side: 'RIGHT'
                         });
                         console.log(`Comment added to ${file.filename} at line ${lineNumber}`);
                       } catch (error) {
                         console.error(`Error adding comment: ${error.message}`);
                         console.error(`File: ${file.filename}, Line: ${lineNumber}`);
-                        console.error(`Diff hunk: ${diffHunk}`);
                       }
                     }
                   } else if (!line.startsWith('-')) {
