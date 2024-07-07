@@ -108,7 +108,6 @@ jobs:
               try {
                 const result = await reviewPR();
 
-                // GitHub API 호출에 필요한 정보를 가져옵니다.
                 const owner = context.repo.owner;
                 const repo = context.repo.repo;
                 const pull_number = context.issue.number;
@@ -126,7 +125,7 @@ jobs:
 
                 const commentsList = JSON.parse(result.message).comments;
 
-                // 각 코멘트에 대해 리뷰 코멘트를 생성합니다.
+                // 각 코멘트에 대해 리뷰 코멘트를 생성
                 for (const comment of commentsList) {
                   const file = changedFiles.find(f => f.filename === comment.path);
 
@@ -134,7 +133,7 @@ jobs:
                     owner: owner,
                     repo: repo,
                     pull_number: pull_number,
-                    body: comment.body, // 코멘트 내용을 그대로 사용합니다.
+                    body: comment.body,
                     path: comment.path,
                     commit_id: commit_id,
                     position: comment.position,
