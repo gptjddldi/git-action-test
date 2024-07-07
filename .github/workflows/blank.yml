@@ -1,8 +1,8 @@
 name: PR Review
 
 on:
-  pull_request:
-    types: [opened, synchronize]
+  issue_comment:
+    types: [created]
 
 jobs:
   review:
@@ -18,7 +18,7 @@ jobs:
           if [[ $(jq .comment.body $GITHUB_EVENT_PATH) == *"$COMMANE_TRIGGER"* ]]; then
             echo "::set-output name=trigger::true"
           else
-            echo "::set-output name=trigger::true"
+            echo "::set-output name=trigger::false"
           fi
       - name: Install dependencies
         if: steps.check_trigger.outputs.trigger == 'true'
@@ -91,7 +91,6 @@ jobs:
                     },
                     body: JSON.stringify(payload)
                   });
-                  
                   if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                   }
@@ -122,7 +121,7 @@ jobs:
                   repo: context.repo.repo,
                   pull_number: context.issue.number,
                 });
-
+                console.log(result.message)
                 const commentsList = JSON.parse(result.message).comments;
 
                 // 각 코멘트에 대해 리뷰 코멘트를 생성
@@ -136,7 +135,8 @@ jobs:
                     body: comment.body,
                     path: comment.path,
                     commit_id: commit_id,
-                    position: comment.position,
+                    line: comment.position,
+                    side: 'RIGHT'
                   });
                 }
               } catch (error) {
