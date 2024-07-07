@@ -27,7 +27,6 @@ jobs:
       - name: PR Review
         if: steps.check_trigger.outputs.trigger == 'true'
         uses: actions/github-script@v6
-        timeout-minutes: 10
         with:
           github-token: ${{secrets.GITHUB_TOKEN}}
           script: |
@@ -144,3 +143,4 @@ jobs:
                 console.error('Error:', error);
               }
             })();
+          timeout-minutes: 10
